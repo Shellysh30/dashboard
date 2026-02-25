@@ -1,0 +1,278 @@
+# Updated Sidebar with Eval Type Processing
+
+## NEW SIDEBAR LAYOUT
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  SIDEBAR                                                      ║
+╠═══════════════════════════════════════════════════════════════╣
+║                                                               ║
+║  📋 Settings                                                  ║
+║  ═══════════════════                                          ║
+║                                                               ║
+║  ### 🤖 Model Selection                                       ║
+║                                                               ║
+║  Select model to analyze                                      ║
+║  ┌─────────────────────────────────────────────────────────┐ ║
+║  │ All Models                                          ▼   │ ║
+║  └─────────────────────────────────────────────────────────┘ ║
+║                                                               ║
+║  ───────────────────────────────────────────────────────────  ║
+║                                                               ║
+║  ### ⚙️ Configuration ID                         ⭐ NEW       ║
+║                                                               ║
+║  Select config ID                                             ║
+║  ┌─────────────────────────────────────────────────────────┐ ║
+║  │ All Configs                                         ▼   │ ║
+║  └─────────────────────────────────────────────────────────┘ ║
+║                                                               ║
+║  ───────────────────────────────────────────────────────────  ║
+║                                                               ║
+║  ### 🔧 Eval Type Processing                     ⭐ NEW       ║
+║                                                               ║
+║  ☐ Convert FP_IOU to FP directly                             ║
+║     If checked, FP_IOU → FP without IoU comparison           ║
+║                                                               ║
+║  ☑ Convert D (duplicates) to FP                              ║
+║     If checked, duplicate detections → FP                    ║
+║                                                               ║
+║  ▶ ℹ️ Eval Type Info                                         ║
+║    (Click to expand)                                          ║
+║                                                               ║
+║  ───────────────────────────────────────────────────────────  ║
+║                                                               ║
+║  ### 🎚️ Confidence Threshold                                 ║
+║                                                               ║
+║  Select confidence threshold                                  ║
+║  ◄─────────●──────────────────────►                          ║
+║  0.0      0.5                  1.0                            ║
+║                                                               ║
+║  ℹ️ Adjust the confidence threshold                          ║
+║     to see how metrics change                                 ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+## EXPANDED EVAL TYPE INFO
+
+```
+╔═══════════════════════════════════════════════════════════════╗
+║  ### 🔧 Eval Type Processing                                  ║
+║                                                               ║
+║  ☐ Convert FP_IOU to FP directly                             ║
+║  ☑ Convert D (duplicates) to FP                              ║
+║                                                               ║
+║  ▼ ℹ️ Eval Type Info                                         ║
+║                                                               ║
+║  ┌───────────────────────────────────────────────────────┐  ║
+║  │  Eval Types:                                          │  ║
+║  │  • TP: True Positive (correct detection)             │  ║
+║  │  • FP: False Positive (incorrect detection)          │  ║
+║  │  • FP_IOU: FP due to low IoU with GT                 │  ║
+║  │  • D: Duplicate detection                            │  ║
+║  │                                                       │  ║
+║  │  Processing:                                          │  ║
+║  │  • When unchecked, FP_IOU is processed based         │  ║
+║  │    on IoU comparison                                 │  ║
+║  │  • D can be kept separate or converted to FP        │  ║
+║  └───────────────────────────────────────────────────────┘  ║
+║                                                               ║
+╚═══════════════════════════════════════════════════════════════╝
+```
+
+## PROCESSING CONFIGURATIONS
+
+### Configuration 1: Strict Evaluation (Default)
+```
+┌────────────────────────────────────────────────┐
+│  ### 🔧 Eval Type Processing                   │
+│                                                │
+│  ☐ Convert FP_IOU to FP directly               │
+│  ☑ Convert D (duplicates) to FP                │
+│                                                │
+│  Result:                                       │
+│  • FP_IOU: Processed with IoU comparison       │
+│  • Best IoU becomes TP                         │
+│  • Duplicates count as FP                      │
+│  • Most realistic metrics                      │
+└────────────────────────────────────────────────┘
+```
+
+### Configuration 2: Lenient on Duplicates
+```
+┌────────────────────────────────────────────────┐
+│  ### 🔧 Eval Type Processing                   │
+│                                                │
+│  ☐ Convert FP_IOU to FP directly               │
+│  ☐ Convert D (duplicates) to FP                │
+│                                                │
+│  Result:                                       │
+│  • FP_IOU: Processed with IoU comparison       │
+│  • Best IoU becomes TP                         │
+│  • Duplicates stay as D                        │
+│  • Lower FAR (duplicates not penalized)        │
+└────────────────────────────────────────────────┘
+```
+
+### Configuration 3: Simple FP Conversion
+```
+┌────────────────────────────────────────────────┐
+│  ### 🔧 Eval Type Processing                   │
+│                                                │
+│  ☑ Convert FP_IOU to FP directly               │
+│  ☑ Convert D (duplicates) to FP                │
+│                                                │
+│  Result:                                       │
+│  • FP_IOU → FP immediately                     │
+│  • No IoU comparison                           │
+│  • Duplicates count as FP                      │
+│  • Fastest processing                          │
+└────────────────────────────────────────────────┘
+```
+
+### Configuration 4: Track Separately
+```
+┌────────────────────────────────────────────────┐
+│  ### 🔧 Eval Type Processing                   │
+│                                                │
+│  ☑ Convert FP_IOU to FP directly               │
+│  ☐ Convert D (duplicates) to FP                │
+│                                                │
+│  Result:                                       │
+│  • FP_IOU → FP immediately                     │
+│  • Duplicates stay as D                        │
+│  • Can analyze duplicate rate separately       │
+│  • Middle ground approach                      │
+└────────────────────────────────────────────────┘
+```
+
+## METRICS IMPACT
+
+### With Default Settings (☐ FP_IOU, ☑ D)
+```
+┌────────────────────────────────────────────────────────┐
+│  📈 Current Metrics                                    │
+│  Model: YourModel | Threshold: 0.500                   │
+│                                                        │
+│  ┌────────────┐  ┌────────────┐  ┌──────┐  ┌──────┐  │
+│  │ Recall     │  │ FAR        │  │ TP   │  │ FP   │  │
+│  │ 87.34%     │  │ 0.0345     │  │ 2456 │  │ 156  │  │
+│  └────────────┘  └────────────┘  └──────┘  └──────┘  │
+│                                                        │
+│  FP includes: Original FP + Processed D                │
+│  TP: Best IoU detections only                          │
+└────────────────────────────────────────────────────────┘
+```
+
+### With Lenient Settings (☐ FP_IOU, ☐ D)
+```
+┌────────────────────────────────────────────────────────┐
+│  📈 Current Metrics                                    │
+│  Model: YourModel | Threshold: 0.500                   │
+│                                                        │
+│  ┌────────────┐  ┌────────────┐  ┌──────┐  ┌──────┐  │
+│  │ Recall     │  │ FAR        │  │ TP   │  │ FP   │  │
+│  │ 87.34%     │  │ 0.0189     │  │ 2456 │  │ 85   │  │
+│  └────────────┘  └────────────┘  └──────┘  └──────┘  │
+│                                                        │
+│  FP: Original FP only (D not included)                 │
+│  TP: Best IoU detections only                          │
+│  Lower FAR because D is excluded                       │
+└────────────────────────────────────────────────────────┘
+```
+
+## WORKFLOW WITH NEW FEATURES
+
+```
+START DASHBOARD
+    │
+    ├─→ 1. Load Data
+    │      • Includes: scenario, config_id, IoU, bbox
+    │      • Status: "Loading data from BigQuery..."
+    │
+    ├─→ 2. Select Model (if multiple available)
+    │      • Dropdown shows model names
+    │      • Select specific model or "All Models"
+    │
+    ├─→ 3. Select Config ID (if multiple available)  ⭐ NEW
+    │      • Dropdown shows config IDs
+    │      • Select specific config or "All Configs"
+    │
+    ├─→ 4. Configure Eval Type Processing          ⭐ NEW
+    │      • Toggle FP_IOU processing
+    │      • Toggle D → FP conversion
+    │      • Read info in expander
+    │
+    ├─→ 5. Processing Happens Automatically
+    │      • "Calculating ROC curve for {model}..."
+    │      • FP_IOU processed based on IoU
+    │      • D converted (or not) based on setting
+    │
+    ├─→ 6. Set Confidence Threshold
+    │      • Move slider 0.0 - 1.0
+    │      • Metrics update in real-time
+    │
+    └─→ 7. Analyze Results
+           • View ROC curve
+           • Check metrics
+           • Download CSV
+           • Compare models
+```
+
+## BEFORE VS AFTER
+
+### BEFORE (Original):
+```
+Eval Types Supported: TP, FP only
+Processing: None
+Result: FP_IOU and D ignored or misclassified
+```
+
+### AFTER (With Processing):
+```
+Eval Types Supported: TP, FP, FP_IOU, D
+Processing: 
+  • FP_IOU: IoU-based TP selection or direct FP
+  • D: Convert to FP or keep separate
+Result: Accurate metrics with proper classification
+```
+
+## EXAMPLE COMPARISON
+
+### Original Metrics (Without Processing):
+```
+Recall: 82.45%  (Missing TPs that were marked FP_IOU)
+FAR: 0.0234     (FP_IOU and D not properly counted)
+TP: 2134        (Doesn't include best FP_IOU)
+FP: 105         (Missing D and FP_IOU)
+```
+
+### Processed Metrics (With Processing):
+```
+Recall: 87.34%  (Includes promoted FP_IOU as TP)
+FAR: 0.0345     (Properly counts FP + D)
+TP: 2456        (Includes best IoU detections)
+FP: 156         (Includes original FP + D)
+```
+
+**Improvement: 4.89% higher recall, more accurate FAR!**
+
+## SUMMARY
+
+✅ **New Sidebar Controls:**
+   - Config ID selector
+   - FP_IOU processing toggle
+   - Duplicate handling toggle
+   - Info expander
+
+✅ **Intelligent Processing:**
+   - IoU-based TP selection
+   - Batch updates for speed
+   - Configurable behavior
+
+✅ **Better Metrics:**
+   - More accurate recall
+   - Proper FAR calculation
+   - Realistic performance assessment
+
+**Your dashboard now handles all eval types correctly!** 🎉
