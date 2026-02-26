@@ -1,3 +1,9 @@
+'''
+    to open the streamlit dashboard run in the terminal:
+            streamlit run .\dashboard_new.py
+'''
+
+
 import streamlit as st
 import pandas as pd
 import numpy as np
