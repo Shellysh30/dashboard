@@ -32,6 +32,9 @@ TABLE_ID = "classified_predictions_third_eye"
 FULL_TABLE_PATH = f"{PROJECT_ID}.{DATASET_ID}.{TABLE_ID}"
 SPLIT_GROUP_TABLE = f"{PROJECT_ID}.{DATASET_ID}.split_groups_third_eye"
 SCENARIO_DETAILS = f"{PROJECT_ID}.{DATASET_ID}.scenario_details_third_eye"
+ANNOTATIONS_TABLE = f"{PROJECT_ID}.{DATASET_ID}.annotations_third_eye"
+
+LOCAL_ANN_CSV = 'annotations_third_eye.csv'
 
 if 'selected_thresholds' not in st.session_state:
     st.session_state.selected_thresholds = {}
@@ -49,6 +52,15 @@ def get_bigquery_client():
         return bigquery.Client(credentials=credentials, project=PROJECT_ID)
     return bigquery.Client(project=PROJECT_ID)
 
+def sync_local_data():
+    """Automatically downloads annotations from BQ if the CSV is missing."""
+    if not os.path.exists(LOCAL_ANN_CSV):
+        with st.status("📥 Downloading dataset metadata for the first time..."):
+            client = get_bigquery_client()
+            query = f"SELECT * FROM `{ANNOTATIONS_TABLE}`"
+            df = client.query(query).to_dataframe()
+            df.to_csv(LOCAL_ANN_CSV, index=False)
+            st.write(f"✅ Created {LOCAL_ANN_CSV}")
 
 @st.cache_data
 def get_filter_options(_client, column_name, table_path):
@@ -83,8 +95,10 @@ def fetch_model_data(_client, selected_models, split, version, datasets, lightin
 
 @st.cache_data
 def load_annotations():
-    if os.path.exists('annotations_third_eye.csv'):
-        df = pd.read_csv('annotations_third_eye.csv')
+    # Ensure file exists before loading
+    sync_local_data()
+    if os.path.exists(LOCAL_ANN_CSV):
+        df = pd.read_csv(LOCAL_ANN_CSV)
         df['gt_key'] = df['scenario'].astype(str) + "_" + df['frame'].astype(str) + "_" + df['id'].astype(str)
         cols = ['Occlusion_Level', 'Appearance_Level', 'Distance', 'Motion', 'Uniform']
         for col in cols:
