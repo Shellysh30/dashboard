@@ -301,6 +301,43 @@ with st.sidebar.expander("➕ Add Special Scenario to Table", expanded=False):
                  })
             st.rerun()
 
+        # --- NEW: Automatic Breakdown Section ---
+        st.markdown("---")
+        st.markdown("### 🤖 Automatic Breakdowns")
+        st.caption("Generate rows for all values in a category")
+
+        # Define which attributes we can break down
+        breakdown_options = {
+            "Appearance": ("Appearance_Level", "app"),
+            "Occlusion": ("Occlusion_Level", "occ"),
+            "Distance": ("Distance", "dist"),
+            "Motion": ("Motion", "mot"),
+            "Uniform": ("Uniform", "uni")
+        }
+
+        # Create a small grid of buttons
+        btn_cols = st.columns(2)
+        for idx, (label, (col_name, run_key)) in enumerate(breakdown_options.items()):
+            with btn_cols[idx % 2]:
+                if st.button(f"By {label}", key=f"btn_break_{label}", use_container_width=True):
+                    # 1. Get all unique values for this specific attribute from the annotation data
+                    unique_values = sorted(ann_df[col_name].unique().tolist())
+
+                    for val in unique_values:
+                        # 2. Build the run object (keeping other filters as "Global")
+                        new_run = {
+                            "model": run_m,
+                            "app": [val] if run_key == "app" else f_app,
+                            "occ": [val] if run_key == "occ" else f_occ,
+                            "dist": [val] if run_key == "dist" else f_dist,
+                            "mot": [val] if run_key == "mot" else f_mot,
+                            "uni": [val] if run_key == "uni" else f_uni,
+                            "lig": s_light,
+                            "cam": s_cam,
+                            "changed_filters": [label]  # Mark only this filter as changed
+                        }
+                        st.session_state.evaluation_runs.append(new_run)
+                    st.rerun()
 
 
 if st.session_state.evaluation_runs:
@@ -491,6 +528,102 @@ if selected_models and not ann_df.empty:
                         <p style="font-size:1.6em; font-weight:bold; color:#FF1493; margin: 10px 0;">{data['Detection f1']:.1%}</p>
                         <p style="font-size:0.85em; color: #555;">FAR: {data['False Alarm Rate']:.2f} | Track FP: {int(data['Amount of Track FP'])}</p>
                     </div>""", unsafe_allow_html=True)
+
+            # ============================================================================
+            # MASTER PERMUTATION GENERATOR
+            # ============================================================================
+            st.markdown("---")
+            st.header("🧮 Master Permutation Table")
+            st.caption("Generate a full metric breakdown for all combinations of selected attributes.")
+
+            with st.expander("🛠️ Configure Permutation Matrix", expanded=False):
+                perm_m = st.selectbox("Select Model for Permutations", selected_models, key="perm_model_sel")
+
+                # Let the user choose which attributes to cross-reference
+                available_attrs = {
+                    "Appearance": "Appearance_Level",
+                    "Occlusion": "Occlusion_Level",
+                    "Distance": "Distance",
+                    "Motion": "Motion",
+                    "Uniform": "Uniform"
+                }
+                selected_attr_keys = st.multiselect("Select Attributes to Permute", list(available_attrs.keys()),
+                                                    default=["Occlusion", "Distance"])
+
+                if st.button("Generate Full Permutation Table"):
+                    import itertools
+
+                    # 1. Prepare the values for each selected attribute
+                    attr_cols = [available_attrs[k] for k in selected_attr_keys]
+                    attr_values = [sorted(ann_df[col].unique().tolist()) for col in attr_cols]
+
+                    # 2. Generate all unique combinations (Cartesian Product)
+                    combinations = list(itertools.product(*attr_values))
+
+                    perm_results = []
+                    m_df = full_df[full_df['model_name'] == perm_m]
+                    t = st.session_state.selected_thresholds.get(perm_m, 0.5)
+                    sc_details_df = client.query(
+                        f"SELECT scenario, cluster, Lighting_Condition, Camera_Movement FROM `{SCENARIO_DETAILS}`").to_dataframe()
+
+                    progress_bar = st.progress(0)
+                    for i, combo in enumerate(combinations):
+                        # Build filter dynamically
+                        query_filter = True
+                        for col, val in zip(attr_cols, combo):
+                            query_filter &= (ann_df[col] == val)
+
+                        p_ann = ann_df[query_filter]
+                        p_keys = set(p_ann['gt_key'].tolist())
+
+                        if not p_keys:
+                            continue
+
+                        # 3. Calculate all metrics for this specific pocket
+                        p_metrics = calculate_advanced_metrics(m_df, p_keys, len(p_keys), d_h, fpiou_h,
+                                                               amount_of_frames)
+                        p_row = p_metrics.iloc[(p_metrics['threshold'] - t).abs().idxmin()].to_dict()
+
+                        # 4. Add Track Metrics
+                        subset = m_df[m_df['confidence'] >= t].copy()
+                        subset['effective_type'] = subset['eval_type'].replace({'D': d_h, 'FP_IOU': fpiou_h})
+                        p_tp = subset[(subset['effective_type'] == 'TP') & (subset['gt_key'].isin(p_keys))]
+                        p_track = calculate_track_metrics(p_tp, subset[subset['effective_type'] == 'FP'], p_ann,
+                                                          total_clusters, sc_details_df)
+
+                        p_row.update(p_track)
+
+                        # Add the labels for the combination
+                        for label, val in zip(selected_attr_keys, combo):
+                            p_row[label] = val
+
+                        perm_results.append(p_row)
+                        progress_bar.progress((i + 1) / len(combinations))
+
+                    # 5. Display the Master Table
+                    if perm_results:
+                        master_df = pd.DataFrame(perm_results)
+
+                        # Reorder columns to put attributes first
+                        cols_order = selected_attr_keys + [c for c in master_df.columns if c not in selected_attr_keys]
+
+                        st.write(f"### {perm_m} Permutation Results ({len(master_df)} combinations)")
+                        st.dataframe(master_df[cols_order].style.map(
+                            lambda x: color_metrics(x, 'high'),
+                            subset=['Detection Recall', 'Detection Precision', 'Detection f1']
+                        ).format({
+                            'Detection Recall': '{:.2%}', 'Detection Precision': '{:.2%}', 'Detection f1': '{:.2%}',
+                            'False Alarm Rate': '{:.2f}', 'Track Recall Obs': '{:.2%}', 'Track Recall Alerts': '{:.2%}'
+                        }), use_container_width=True)
+
+                        # Export Option
+                        csv = master_df.to_csv(index=False).encode('utf-8')
+                        st.download_button("📥 Download Master Table as CSV", data=csv,
+                                           file_name=f"{perm_m}_permutations.csv", mime='text/csv')
+                    else:
+                        st.warning("No data found for these combinations.")
+
+
 else:
     st.info("Please select models to begin.")
 
